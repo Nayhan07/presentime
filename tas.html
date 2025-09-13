@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Presentime — Local Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin:0; background:#f5f7fa; }
+    header { background:#2b9bd7; color:white; padding:1rem; display:flex; align-items:center; justify-content:space-between; }
+    header h1 { margin:0; }
+    main { max-width:800px; margin:1rem auto; padding:0 1rem; }
+    #composer { background:white; padding:1rem; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+    #composer textarea { width:100%; min-height:80px; }
+    #feed .post { background:white; margin-top:1rem; padding:1rem; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+    .post-header { display:flex; justify-content:space-between; font-size:0.9rem; color:#555; }
+    .post-actions { margin-top:0.5rem; }
+    .post-actions button { margin-right:0.5rem; }
+    #profile { background:white; padding:1rem; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); margin-top:1rem; }
+    #auth { background:white; padding:1rem; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); margin-top:1rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Presentime (Local Demo)</h1>
+    <div id="auth-status">Not signed in</div>
+  </header>
+
+  <main>
+    <section id="auth">
+      <h2>Login / Sign up</h2>
+      <input id="email" placeholder="Email"><br>
+      <input id="password" type="password" placeholder="Password"><br>
+      <button onclick="signUp()">Sign up</button>
+      <button onclick="signIn()">Sign in</button>
+      <button onclick="signOut()">Sign out</button>
+    </section>
+
+    <section id="profile" style="display:none"></section>
+
+    <section id="composer" style="display:none">
+      <textarea id="post-text" placeholder="Write something..."></textarea><br>
+      <select id="visibility">
+        <option value="public">Public</option>
+        <option value="private">Private</option>
+      </select>
+      <button onclick="createPost()">Post</button>
+    </section>
+
+    <section id="feed"></section>
+  </main>
+
+<script>
+  const DB_KEY = 'presentime_local';
+  function loadDB(){ return JSON.parse(localStorage.getItem(DB_KEY) || '{"users":[],"posts":[],"currentUser":null}'); }
+  function saveDB(db){ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+  let db = loadDB();
+
+  function signUp(){
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    if(db.users.find(u=>u.email===email)) return alert('User exists');
+    const user = { id:Date.now(), email, password, name: email.split('@')[0] };
+    db.users.push(user);
+    db.currentUser = user.id;
+    saveDB(db);
+    render();
+  }
+  function signIn(){
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const user = db.users.find(u=>u.email===email && u.password===password);
+    if(!user) return alert('Invalid login');
+    db.currentUser = user.id;
+    saveDB(db);
+    render();
+  }
+  function signOut(){ db.currentUser=null; saveDB(db); render(); }
+
+  function currentUser(){ return db.users.find(u=>u.id===db.currentUser)||null; }
+
+  function createPost(){
+    const cu=currentUser(); if(!cu) return alert('Sign in to post');
+    const text=document.getElementById('post-text').value;
+    if(!text) return;
+    const visibility=document.getElementById('visibility').value;
+    const post={ id:Date.now(), userId:cu.id, content:text, visibility, likes:0, createdAt:new Date().toISOString() };
+    db.posts.unshift(post);
+    saveDB(db);
+    document.getElementById('post-text').value='';
+    render();
+  }
+
+  function likePost(id){
+    const post=db.posts.find(p=>p.id===id); if(!post) return;
+    post.likes++;
+    saveDB(db); render();
+  }
+
+  function deletePost(id){
+    db.posts=db.posts.filter(p=>p.id!==id);
+    saveDB(db); render();
+  }
+
+  function render(){
+    const cu=currentUser();
+    document.getElementById('auth-status').textContent = cu? 'Signed in as '+cu.email : 'Not signed in';
+    document.getElementById('composer').style.display = cu? 'block':'none';
+
+    // profile
+    const profile=document.getElementById('profile');
+    if(cu){ profile.style.display='block'; profile.innerHTML=`<h2>My Profile</h2><p>Email: ${cu.email}</p><p>Posts: ${db.posts.filter(p=>p.userId===cu.id).length}</p>`; }
+    else profile.style.display='none';
+
+    // feed
+    const feed=document.getElementById('feed');
+    feed.innerHTML='<h2>Feed</h2>';
+    db.posts.forEach(p=>{
+      if(p.visibility==='private' && (!cu || cu.id!==p.userId)) return;
+      const user=db.users.find(u=>u.id===p.userId);
+      feed.innerHTML+=`<div class='post'><div class='post-header'><span>${user?user.name:'?'}</span><span>${new Date(p.createdAt).toLocaleString()}</span></div><div>${p.content}</div><div class='post-actions'><button onclick="likePost(${p.id})">❤️ ${p.likes}</button>${cu&&cu.id===p.userId?`<button onclick="deletePost(${p.id})">Delete</button>`:''}</div></div>`;
+    });
+  }
+
+  render();
+</script>
+</body>
+</html>
